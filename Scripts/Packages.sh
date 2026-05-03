@@ -77,6 +77,15 @@ UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "gecoosac luci-app-timewol luci-app-wolplus"
 UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
+# 添加 iStore 商店
+git clone --depth=1 https://github.com/linkease/istore.git istore
+
+cp -rf istore/luci/luci-app-store ./luci-app-store
+cp -rf istore/luci/luci-lib-taskd ./luci-lib-taskd
+cp -rf istore/luci/luci-lib-xterm ./luci-lib-xterm
+cp -rf istore/luci/taskd ./taskd
+
+rm -rf istore
 
 #更新软件包版本
 UPDATE_VERSION() {
