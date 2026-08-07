@@ -176,19 +176,33 @@ jobs:
 
           make defconfig -j$(nproc) && make clean -j$(nproc)
 
+      - name: Prepare Logs
+        if: env.WRT_TEST != 'true'
+        run: |
+          mkdir -p ./wrt/logs
+
       - name: Download Packages
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
-
-          make download -j$(nproc) || make download -j1 V=s
+          set -o pipefail
+          make download -j$(nproc) 2>&1 | tee ./logs/download.log
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
+          set -o pipefail
+          make -j1 V=s 2>&1 | tee ./logs/build.log
 
-          make -j1 V=s
+      - name: Upload Build Logs
+        if: always() && env.WRT_TEST != 'true'
+        uses: actions/upload-artifact@main
+        with:
+          name: build-logs-${{env.WRT_CONFIG}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          path: |
+            ./wrt/logs/download.log
+            ./wrt/logs/build.log
 
       - name: Machine Information
         run: |
