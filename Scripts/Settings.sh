@@ -53,9 +53,8 @@ if [ "$WRT_CONFIG" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
 	echo "CONFIG_TARGET_MULTI_PROFILE=n" >> ./.config
 	echo "CONFIG_TARGET_PER_DEVICE_ROOTFS=n" >> ./.config
 	echo "CONFIG_TARGET_PROFILE=\"DEVICE_link_nn6000-v1\"" >> ./.config
-	#GENERAL.txt 把 usbutils、usb-modeswitch 置为 n，USB 网卡与 4G/5G 模块需要它们
+	#GENERAL.txt 把 usbutils 置为 n，但接 U 盘/移动硬盘需要 lsusb 排查设备，补回
 	echo "CONFIG_PACKAGE_usbutils=y" >> ./.config
-	echo "CONFIG_PACKAGE_usb-modeswitch=y" >> ./.config
 fi
 
 #无WIFI配置标志
