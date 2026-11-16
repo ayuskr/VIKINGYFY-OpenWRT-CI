@@ -46,12 +46,16 @@ if [ -n "$WRT_PACKAGE" ]; then
 	echo -e "$WRT_PACKAGE" >> ./.config
 fi
 
-#单设备构建：GENERAL.txt 在机型配置之后追加，其中的 CONFIG_TARGET_MULTI_PROFILE=y
-#会把整个平台的全部设备都编译进来，这里改回只编译 nn6000-v1
+#nn6000-v1 专用：单设备构建 + 回补被 GENERAL.txt 覆盖的 USB 工具
 if [ "$WRT_CONFIG" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
+	#GENERAL.txt 在机型配置之后追加，其中的 CONFIG_TARGET_MULTI_PROFILE=y
+	#会把整个平台的全部设备都编译进来，这里改回只编译 nn6000-v1
 	echo "CONFIG_TARGET_MULTI_PROFILE=n" >> ./.config
 	echo "CONFIG_TARGET_PER_DEVICE_ROOTFS=n" >> ./.config
 	echo "CONFIG_TARGET_PROFILE=\"DEVICE_link_nn6000-v1\"" >> ./.config
+	#GENERAL.txt 把 usbutils、usb-modeswitch 置为 n，USB 网卡与 4G/5G 模块需要它们
+	echo "CONFIG_PACKAGE_usbutils=y" >> ./.config
+	echo "CONFIG_PACKAGE_usb-modeswitch=y" >> ./.config
 fi
 
 #无WIFI配置标志
@@ -62,9 +66,6 @@ fi
 #高通平台调整
 DTS_PATH="./target/linux/qualcommax/dts/"
 if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
-	#取消nss相关feed
-	echo "CONFIG_FEED_nss_packages=n" >> ./.config
-	echo "CONFIG_FEED_sqm_scripts_nss=n" >> ./.config
 	#设置NSS版本
 	echo "CONFIG_NSS_FIRMWARE_VERSION_11_4=n" >> ./.config
 	echo "CONFIG_NSS_FIRMWARE_VERSION_12_5=y" >> ./.config
