@@ -232,8 +232,8 @@ jobs:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
           files: ./wrt/upload/*.*
           body: |
-            这是个平台固件包，内含多个设备！
-            请注意选择你需要的设备固件！
+            单设备固件，仅包含配置 ${{env.WRT_CONFIG}} 指定的机型。
+            刷机前请核对机型与固件文件名，不要跨机型刷入。
             不要问，刷就完事了！
 
             全系带开源硬件加速，别问了！
