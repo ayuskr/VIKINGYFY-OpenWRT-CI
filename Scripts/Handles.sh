@@ -92,3 +92,12 @@ if [ -f "$RUST_FILE" ]; then
 
 	cd $PKG_PATH && echo "rust has been fixed!"
 fi
+
+#接入 NaiLink：仅 nn6000-v1 配置将 daed 与三个内核直接打进固件
+if [ "${WRT_CONFIG}" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
+	echo " "
+
+	"$GITHUB_WORKSPACE/Scripts/NaiLink.sh"
+
+	cd $PKG_PATH && echo "NaiLink has been bundled!"
+fi
