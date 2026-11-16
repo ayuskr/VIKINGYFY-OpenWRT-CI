@@ -46,6 +46,14 @@ if [ -n "$WRT_PACKAGE" ]; then
 	echo -e "$WRT_PACKAGE" >> ./.config
 fi
 
+#单设备构建：GENERAL.txt 在机型配置之后追加，其中的 CONFIG_TARGET_MULTI_PROFILE=y
+#会把整个平台的全部设备都编译进来，这里改回只编译 nn6000-v1
+if [ "$WRT_CONFIG" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
+	echo "CONFIG_TARGET_MULTI_PROFILE=n" >> ./.config
+	echo "CONFIG_TARGET_PER_DEVICE_ROOTFS=n" >> ./.config
+	echo "CONFIG_TARGET_PROFILE=\"DEVICE_link_nn6000-v1\"" >> ./.config
+fi
+
 #无WIFI配置标志
 if [[ "${WRT_CONFIG,,}" == *"wifi"* && "${WRT_CONFIG,,}" == *"no"* ]]; then
 	echo "WRT_WIFI=wifi-no" >> $GITHUB_ENV
