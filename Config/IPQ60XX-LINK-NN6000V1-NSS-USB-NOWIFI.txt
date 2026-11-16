@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 #
-# link_nn6000-v1 / IPQ60XX / NSS / USB / No WiFi / Main Router
+# link_nn6000-v1 / IPQ60XX / NSS / USB storage only / No WiFi / Main Router
 # Put this file at:
 #   Config/IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI.txt
 #
@@ -64,14 +64,15 @@ CONFIG_PACKAGE_dnsmasq_full_ipset=y
 CONFIG_PACKAGE_dnsmasq_full_nftset=y
 CONFIG_PACKAGE_dnsmasq_full_conntrack=y
 
-# ===== USB support: storage + USB Ethernet / tethering / modem basics =====
+# ===== USB: 仅存储用途（U 盘 / 移动硬盘）=====
+# 明确不需要：USB 网卡、USB 串口、4G/5G 模块、手机共享网络。
+# UAS 用于 USB3 硬盘盒（UASP 协议），对 SSD 硬盘盒性能提升明显，保留。
 CONFIG_PACKAGE_kmod-usb-core=y
 CONFIG_PACKAGE_kmod-usb2=y
 CONFIG_PACKAGE_kmod-usb3=y
 CONFIG_PACKAGE_kmod-usb-dwc3=y
 CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y
 CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
-CONFIG_PACKAGE_kmod-usb-xhci-pci=y
 CONFIG_PACKAGE_kmod-usb-ohci=y
 CONFIG_PACKAGE_kmod-usb-storage=y
 CONFIG_PACKAGE_kmod-usb-storage-extras=y
@@ -81,12 +82,11 @@ CONFIG_PACKAGE_block-mount=y
 CONFIG_PACKAGE_automount=y
 CONFIG_PACKAGE_mount-utils=y
 CONFIG_PACKAGE_usbutils=y
-CONFIG_PACKAGE_usb-modeswitch=y
 CONFIG_PACKAGE_blkid=y
 CONFIG_PACKAGE_lsblk=y
 CONFIG_PACKAGE_e2fsprogs=y
 
-# Common USB disk filesystems.
+# USB 磁盘文件系统。
 CONFIG_PACKAGE_kmod-fs-ext4=y
 CONFIG_PACKAGE_kmod-fs-exfat=y
 CONFIG_PACKAGE_kmod-fs-vfat=y
@@ -95,30 +95,6 @@ CONFIG_PACKAGE_kmod-nls-base=y
 CONFIG_PACKAGE_kmod-nls-cp437=y
 CONFIG_PACKAGE_kmod-nls-iso8859-1=y
 CONFIG_PACKAGE_kmod-nls-utf8=y
-
-# Common USB network adapters / tethering.
-CONFIG_PACKAGE_kmod-mii=y
-CONFIG_PACKAGE_kmod-usb-net=y
-CONFIG_PACKAGE_kmod-usb-net-asix=y
-CONFIG_PACKAGE_kmod-usb-net-asix-ax88179=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-eem=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-subset=y
-CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
-CONFIG_PACKAGE_kmod-usb-net-ipheth=y
-CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
-CONFIG_PACKAGE_kmod-usb-net-rndis=y
-CONFIG_PACKAGE_kmod-usb-net-rtl8150=y
-CONFIG_PACKAGE_kmod-usb-net-rtl8152=y
-CONFIG_PACKAGE_kmod-usb-serial=y
-CONFIG_PACKAGE_kmod-usb-serial-option=y
-CONFIG_PACKAGE_kmod-usb-serial-wwan=y
-CONFIG_PACKAGE_kmod-usb-wdm=y
-CONFIG_PACKAGE_libqmi=y
-CONFIG_PACKAGE_uqmi=y
-CONFIG_PACKAGE_umbim=y
 
 # ===== Required plugins =====
 # NaiLink 取代 Passwall：daed 运行包与 LuCI 由 Scripts/NaiLink.sh 直接注入固件，
