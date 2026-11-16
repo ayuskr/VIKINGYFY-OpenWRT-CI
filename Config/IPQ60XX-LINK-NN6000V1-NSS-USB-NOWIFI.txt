@@ -130,8 +130,18 @@ CONFIG_PACKAGE_uqmi=y
 CONFIG_PACKAGE_umbim=y
 
 # ===== Required plugins =====
-CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_passwall=y
+# NaiLink 取代 Passwall：daed 运行包与 LuCI 由 Scripts/NaiLink.sh 直接注入固件，
+# dae / sing-box / mihomo 三个内核一并内建，运行时无需再下载。
+CONFIG_PACKAGE_luci-app-passwall=n
+CONFIG_PACKAGE_passwall=n
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched-bpf=y
+CONFIG_PACKAGE_jshn=y
+CONFIG_PACKAGE_jsonfilter=y
+CONFIG_PACKAGE_uclient-fetch=y
+CONFIG_PACKAGE_v2ray-geoip=y
+CONFIG_PACKAGE_v2ray-geosite=y
+CONFIG_KERNEL_DEBUG_INFO_BTF=y
 CONFIG_PACKAGE_luci-app-mosdns=y
 CONFIG_PACKAGE_mosdns=y
 CONFIG_PACKAGE_luci-app-lucky=y
