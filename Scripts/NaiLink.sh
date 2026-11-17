@@ -155,6 +155,23 @@ if [ "${MISSING}" != "0" ]; then
 	exit 1
 fi
 
+# /etc/init.d/daed 的 start_service 第一件事就是：
+#   config_load daed; config_get_bool enabled main enabled 0
+#   [ "$enabled" = 1 ] || return 0
+# 也就是说没有 /etc/config/daed（或 enabled 不为 1）时，启动是"成功返回但什么都不做"，
+# procd 报 active with no instances，LuCI 显示启动失败且日志为空，极难排查。
+# 运行包本身不带这个文件（它由 daed-router-setup 交互式安装时才生成），
+# 而我们是解包直装、从不执行安装器，所以这里补一份最小可用的默认值。
+# 只在该文件缺失时写入，不覆盖用户已有配置（sysupgrade 会保留 /etc/config）。
+if [ ! -f "${BASE_DIR}/etc/config/daed" ]; then
+	mkdir -p "${BASE_DIR}/etc/config"
+	cat > "${BASE_DIR}/etc/config/daed" <<-'EOF'
+		config main 'main'
+			option enabled '1'
+	EOF
+	echo "NaiLink: 已写入默认 /etc/config/daed (enabled=1)"
+fi
+
 # dae 依赖的 GeoSite / GeoIP 由 v2ray-geoip、v2ray-geosite 提供
 mkdir -p "${BASE_DIR}/usr/share/daed"
 ln -sf ../v2ray/geosite.dat "${BASE_DIR}/usr/share/daed/geosite.dat"
