@@ -52,6 +52,10 @@ UPDATE_PACKAGE "aurora" "eamonxg/luci-theme-aurora" "master"
 UPDATE_PACKAGE "aurora-config" "eamonxg/luci-app-aurora-config" "master"
 UPDATE_PACKAGE "kucat" "sirpdboy/luci-theme-kucat" "master"
 UPDATE_PACKAGE "kucat-config" "sirpdboy/luci-app-kucat-config" "master"
+# Vantage：主题 + 仪表盘同仓库，仓库根下就是 luci-theme-vantage/ 与 luci-app-vantage/ 两个包，
+# 直接保留整个仓目录即可被 buildroot 递归扫描到，不需要 pkg/name 特殊处理。
+# 注意：QCA-ALL 已改用 vantage，MTK-ALL 仍在用 aurora，所以上面的 aurora 源码保留。
+UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage" "main"
 
 UPDATE_PACKAGE "homeproxy" "VIKINGYFY/homeproxy" "main"
 UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
