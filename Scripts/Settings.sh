@@ -39,7 +39,23 @@ sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
-echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+
+#主题附带的配置页/仪表盘，各主题包名不统一，不能一律拼成 luci-app-<theme>-config
+#  aurora / kucat : luci-app-<theme>-config
+#  vantage        : luci-app-vantage（仪表盘），另带中文本地化包
+case "$WRT_THEME" in
+	aurora|kucat)
+		echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+		;;
+	vantage)
+		echo "CONFIG_PACKAGE_luci-app-vantage=y" >> ./.config
+		echo "CONFIG_PACKAGE_luci-i18n-vantage-theme-zh-cn=y" >> ./.config
+		echo "CONFIG_PACKAGE_luci-i18n-vantage-zh-cn=y" >> ./.config
+		;;
+	*)
+		echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+		;;
+esac
 
 #手动调整的插件
 if [ -n "$WRT_PACKAGE" ]; then
