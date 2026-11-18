@@ -186,10 +186,70 @@ jobs:
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
+        shell: bash
         run: |
+          set -o pipefail
+          mkdir -p "$GITHUB_WORKSPACE/diagnostics"
           cd ./wrt/
 
-          make -j$(nproc) || make -j1 V=s
+          # 保留两轮输出，tee 不得掩盖 make 的失败状态。
+          if make -j$(nproc) 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-parallel.log"; then
+            exit 0
+          else
+            make -j1 V=s 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-retry.log"
+          fi
+
+      # 在移动镜像和 make clean 之前保存；普通编译失败也执行。
+      - name: Collect Build Diagnostics
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          OUT="$GITHUB_WORKSPACE/diagnostics"
+          mkdir -p "$OUT"
+          {
+            printf 'workflow_commit=%s\nref=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'config=%s\nsource=%s\nsource_branch=%s\ntest=%s\n' "$WRT_CONFIG" "$WRT_SOURCE" "$WRT_BRANCH" "$WRT_TEST"
+            if [ -d ./wrt/.git ]; then
+              printf 'source_commit='
+              git -C ./wrt rev-parse HEAD
+            fi
+          } > "$OUT/build-info.txt"
+          if [ -d ./wrt ]; then
+            cd ./wrt/
+            if [ -f .config ]; then cp .config "$OUT/openwrt-config.txt"; fi
+            if [ -d build_dir ]; then
+              while IFS= read -r -d '' FILE; do
+                DEST="$OUT/kernel-configs/$FILE.txt"
+                mkdir -p "$(dirname "$DEST")"
+                cp "$FILE" "$DEST"
+              done < <(find build_dir -type f \( -path 'build_dir/target-*/linux-*/linux-*/.config' -o -path 'build_dir/target-*/linux-*/.config.target' -o -path 'build_dir/target-*/linux-*/.config.set' -o -path 'build_dir/target-*/linux-*/.config.override' \) -print0)
+            fi
+            if [ ! -d "$OUT/kernel-configs" ]; then
+              echo 'No Linux configuration found: TEST mode or failure before kernel configuration.' > "$OUT/kernel-config-unavailable.txt"
+            fi
+            # 记录所有输出文件和内核中间文件的字节数，不上传大型镜像。
+            printf 'bytes\tpath\n' > "$OUT/image-sizes.tsv"
+            if [ -d bin/targets ]; then
+              find bin/targets -type d -name packages -prune -o -type f -printf '%s\t%p\n' >> "$OUT/image-sizes.tsv"
+            fi
+            if [ -d build_dir ]; then
+              find build_dir -type f \( -path 'build_dir/target-*/linux-*/*.itb' -o -path 'build_dir/target-*/linux-*/*.fit' -o -path 'build_dir/target-*/linux-*/*.bin' -o -path 'build_dir/target-*/linux-*/vmlinux*' -o -path 'build_dir/target-*/linux-*/linux-*/vmlinux*' -o -path 'build_dir/target-*/linux-*/linux-*/arch/arm64/boot/Image*' \) -printf '%s\t%p\n' >> "$OUT/image-sizes.tsv"
+            fi
+          fi
+          grep -nEi 'is too big|too large|size.*(exceed|limit)|Error [0-9]+|No space left' "$OUT"/build-*.log > "$OUT/errors-and-size-checks.txt" || true
+          echo 'Diagnostic files collected before firmware packaging/cleanup.'
+
+      - name: Upload Build Diagnostics
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{github.run_id}}-${{github.run_attempt}}
+          path: diagnostics/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Machine Information
         run: |
