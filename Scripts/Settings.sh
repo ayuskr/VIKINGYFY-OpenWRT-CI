@@ -92,3 +92,50 @@ if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
 	#其他调整
 	echo "CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y" >> ./.config
 fi
+
+# NN6000 v1 专用内核瘦身：修改真正参与合并的 target 内核配置，
+# 不向 OpenWrt .config 写入不存在的 CONFIG_KERNEL_PHY_* 选项。
+# 保留 QMP_USB / QUSB2 / QMP_PCIE；不关闭 BTF、BPF、KPROBES、
+# PERF_EVENTS、FTRACE、KALLSYMS、NSS、MMC 或 USB 存储。
+if [ "$WRT_CONFIG" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
+	python3 - <<'PY' || exit 1
+from pathlib import Path
+import re
+
+root = Path('target/linux/qualcommax')
+configs = sorted(root.glob('config-*')) + sorted((root / 'ipq60xx').glob('config-*'))
+configs = [path for path in configs if path.is_file()]
+if not configs:
+    raise SystemExit('NN6000 kernel trim: target kernel config not found; refusing to continue')
+
+def disable(text, symbol):
+    pattern = r'^(?:' + re.escape(symbol) + r'=.*|# ' + re.escape(symbol) + r' is not set)\n?'
+    text = re.sub(pattern, '', text, flags=re.MULTILINE)
+    return text.rstrip('\n') + '\n# ' + symbol + ' is not set\n'
+
+# IPQ6000 不使用 UFS、USB/DP combo PHY 或 MSM8996 专用 PCIe PHY。
+# 不裁剪 IPQ60xx 使用的 USB/PCIe PHY 驱动。
+symbols = (
+    'CONFIG_PHY_QCOM_QMP_UFS',
+    'CONFIG_PHY_QCOM_QMP_COMBO',
+    'CONFIG_PHY_QCOM_QMP_PCIE_8996',
+    'CONFIG_ARM64_BRBE',
+)
+for path in configs:
+    text = path.read_text()
+    for symbol in symbols:
+        text = disable(text, symbol)
+    path.write_text(text)
+    written = path.read_text()
+    for symbol in symbols:
+        if ('# ' + symbol + ' is not set') not in written.splitlines():
+            raise SystemExit(f'NN6000 kernel trim verification failed: {path}: {symbol}')
+    print(f'NN6000 kernel trim applied: {path}: {", ".join(symbols)}')
+
+# BRBE 有真实的 OpenWrt 配置入口，且在 PERF_EVENTS 打开时默认 y。
+# 同时关闭该入口，避免后续 make defconfig 再将它打开。
+path = Path('.config')
+path.write_text(disable(path.read_text(), 'CONFIG_KERNEL_ARM64_BRBE'))
+print('NN6000: BTF/BPF/NSS/USB storage preserved; final kernel size still requires a build')
+PY
+fi
