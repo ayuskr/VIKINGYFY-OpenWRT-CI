@@ -115,11 +115,18 @@ def disable(text, symbol):
 
 # IPQ6000 不使用 UFS、USB/DP combo PHY 或 MSM8996 专用 PCIe PHY。
 # 不裁剪 IPQ60xx 使用的 USB/PCIe PHY 驱动。
+# 第二轮：Cortex-A53 不支持 SVE/SME，关闭相关寄存器上下文处理代码；
+# DEBUG_BUGVERBOSE 只去掉 BUG 报告的源码文件名/行号，保留 BUG 检测、
+# printk、符号表和栈回溯。不关闭 DEBUG_INFO，避免破坏 BTF。
+# 实际 FIT 压缩收益必须由下一次构建测量，不以未压缩节省量代替。
 symbols = (
     'CONFIG_PHY_QCOM_QMP_UFS',
     'CONFIG_PHY_QCOM_QMP_COMBO',
     'CONFIG_PHY_QCOM_QMP_PCIE_8996',
     'CONFIG_ARM64_BRBE',
+    'CONFIG_ARM64_SVE',
+    'CONFIG_ARM64_SME',
+    'CONFIG_DEBUG_BUGVERBOSE',
 )
 for path in configs:
     text = path.read_text()
