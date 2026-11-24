@@ -1,0 +1,6 @@
+# Applied last for the NN6000 v1 Honk build.
+# CONFIG_PACKAGE_luci-app-mosdns is not set
+# CONFIG_PACKAGE_mosdns is not set
+CONFIG_PACKAGE_honk=y
+CONFIG_PACKAGE_luci-app-honk=y
+CONFIG_PACKAGE_dnsmasq-full=y
