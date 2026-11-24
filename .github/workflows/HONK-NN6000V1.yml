@@ -40,7 +40,7 @@ jobs:
           ln -s /mnt/build_wrt wrt
           mkdir -p diagnostics
           find Scripts -name '*.sh' -exec dos2unix {} + -exec chmod +x {} +
-      - name: Fetch source and configure
+      - name: Fetch source and prepare configuration
         run: |
           git -C wrt init
           git -C wrt fetch --depth=1 https://github.com/VIKINGYFY/immortalwrt.git "$SOURCE_REV"
@@ -60,14 +60,47 @@ jobs:
           "$GITHUB_WORKSPACE/Scripts/Settings.sh"
           sed -i -E '/^(# )?CONFIG_PACKAGE_(mosdns|luci-app-mosdns|honk|luci-app-honk|dnsmasq-full)(=| is not set)/d' .config
           cat "$GITHUB_WORKSPACE/Config/HONK-PACKAGES.txt" >> .config
-          make defconfig
+      - name: Validate Honk firmware configuration
+        shell: bash
+        working-directory: wrt
+        run: |
+          set -euo pipefail
+          if ! make defconfig 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/defconfig.log"; then
+            echo '::error::make defconfig failed; firmware build skipped. See defconfig.log and the Kconfig errors above.'
+            exit 1
+          fi
           cp .config "$GITHUB_WORKSPACE/diagnostics/openwrt-config.txt"
-          grep -Fx 'CONFIG_TARGET_PROFILE="DEVICE_link_nn6000-v1"' .config
-          for symbol in CONFIG_PACKAGE_honk CONFIG_PACKAGE_luci-app-honk CONFIG_PACKAGE_dnsmasq-full CONFIG_KERNEL_DEBUG_INFO_BTF; do
-            grep -Fx "$symbol=y" .config || { echo "Required option missing: $symbol"; exit 1; }
+
+          required=(
+            CONFIG_PACKAGE_honk
+            CONFIG_PACKAGE_luci-app-honk
+            CONFIG_PACKAGE_dnsmasq-full
+            CONFIG_KERNEL_DEBUG_INFO_BTF
+          )
+          failed=0
+          for symbol in "${required[@]}"; do
+            if grep -Fxq -- "${symbol}=y" .config; then
+              printf 'OK: %s=y\n' "$symbol"
+            else
+              echo "::error file=wrt/.config::${symbol} must be set to y"
+              failed=1
+            fi
           done
-          if grep -E '^CONFIG_PACKAGE_(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router)=[ym]$' .config; then exit 1; fi
-          test ! -e package/base-files/files/usr/bin/daed
+          if ! grep -Fxq 'CONFIG_TARGET_PROFILE="DEVICE_link_nn6000-v1"' .config; then
+            echo '::error file=wrt/.config::Expected the NN6000 v1 device profile.'
+            failed=1
+          fi
+          if grep -E '^CONFIG_PACKAGE_(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router)=[ym]$' .config; then
+            echo '::error file=wrt/.config::mosdns or daed was unexpectedly selected.'
+            failed=1
+          fi
+          if [ -e package/base-files/files/usr/bin/daed ]; then
+            echo '::error::Found an injected daed binary in base-files.'
+            failed=1
+          fi
+          if (( failed )); then
+            exit 1
+          fi
       - name: Download packages
         working-directory: wrt
         run: make download -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/download.log"
