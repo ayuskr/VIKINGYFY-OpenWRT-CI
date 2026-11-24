@@ -41,7 +41,9 @@ jobs:
           mkdir -p diagnostics
           find Scripts -name '*.sh' -exec dos2unix {} + -exec chmod +x {} +
       - name: Fetch source and prepare configuration
+        shell: bash
         run: |
+          set -euo pipefail
           git -C wrt init
           git -C wrt fetch --depth=1 https://github.com/VIKINGYFY/immortalwrt.git "$SOURCE_REV"
           git -C wrt checkout --detach FETCH_HEAD
@@ -49,29 +51,47 @@ jobs:
           printf 'ci=%s\nsource=%s\n' "$GITHUB_SHA" "$SOURCE_REV" > diagnostics/build-info.txt
           cd wrt
           if [ -f scripts/projectsmirrors.json ]; then sed -i '/.cn\//d; /tencent/d; /aliyun/d' scripts/projectsmirrors.json; fi
+          # This image does not need the video feed (including the Qt5 Kconfig cycle).
+          sed -i -E '/^[[:space:]]*src-[^[:space:]]+[[:space:]]+video[[:space:]]/d' feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+          # Unregister only the unused LuCI package participating in the fwknopd cycle.
+          find package/feeds -type l -name luci-app-fwknopd -print -delete
           (
             cd package
-            "$GITHUB_WORKSPACE/Scripts/Packages.sh"
+            # Honk does not use Nikki's mutually exclusive Mihomo variants or sing-box.
+            sed -E '/^UPDATE_PACKAGE "nikki" /d; /^UPDATE_VERSION "sing-box"([[:space:]]|$)/d' \
+              "$GITHUB_WORKSPACE/Scripts/Packages.sh" > "$RUNNER_TEMP/honk-packages.sh"
+            bash "$RUNNER_TEMP/honk-packages.sh"
             "$GITHUB_WORKSPACE/Scripts/Handles.sh"
           )
           cat "$GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt" "$GITHUB_WORKSPACE/Config/GENERAL.txt" > .config
           "$GITHUB_WORKSPACE/Scripts/Settings.sh"
           sed -i -E '/^(# )?CONFIG_PACKAGE_(mosdns|luci-app-mosdns|honk|luci-app-honk|dnsmasq-full)(=| is not set)/d' .config
           cat "$GITHUB_WORKSPACE/Config/HONK-PACKAGES.txt" >> .config
+          # TARGET_DEVICE_* is the multi-profile selection. For a single device,
+          # select the actual target choice; Kconfig derives TARGET_PROFILE from it.
+          sed -i -E '/^(# )?CONFIG_TARGET_(MULTI_PROFILE|ALL_PROFILES|PER_DEVICE_ROOTFS|PROFILE|DEVICE_qualcommax_ipq60xx_DEVICE_link_nn6000-v1|qualcommax_ipq60xx_DEVICE_link_nn6000-v1)(=| is not set)/d' .config
+          cat >> .config <<'EOF'
+          # CONFIG_TARGET_MULTI_PROFILE is not set
+          CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_link_nn6000-v1=y
+          EOF
       - name: Validate Honk firmware configuration
         shell: bash
         working-directory: wrt
         run: |
           set -euo pipefail
-          if ! make defconfig 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/defconfig.log"; then
-            echo '::error::make defconfig failed; firmware build skipped. See defconfig.log and the Kconfig errors above.'
+          log="$GITHUB_WORKSPACE/diagnostics/defconfig.log"
+          rc=0
+          make defconfig 2>&1 | tee "$log" || rc=$?
+          if [ -f .config ]; then cp .config "$GITHUB_WORKSPACE/diagnostics/openwrt-config.txt"; fi
+          if (( rc != 0 )) || grep -qi 'recursive dependency detected' "$log"; then
+            echo '::error::Kconfig failed or reported a recursive dependency; firmware build skipped. See defconfig.log.'
             exit 1
           fi
-          cp .config "$GITHUB_WORKSPACE/diagnostics/openwrt-config.txt"
 
           required=(
+            CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_link_nn6000-v1
             CONFIG_PACKAGE_honk
             CONFIG_PACKAGE_luci-app-honk
             CONFIG_PACKAGE_dnsmasq-full
@@ -86,8 +106,9 @@ jobs:
               failed=1
             fi
           done
-          if ! grep -Fxq 'CONFIG_TARGET_PROFILE="DEVICE_link_nn6000-v1"' .config; then
-            echo '::error file=wrt/.config::Expected the NN6000 v1 device profile.'
+          if ! grep -Fxq 'CONFIG_TARGET_PROFILE="DEVICE_link_nn6000-v1"' .config || grep -Fxq 'CONFIG_TARGET_MULTI_PROFILE=y' .config; then
+            echo '::error file=wrt/.config::Expected the single-device NN6000 v1 profile.'
+            grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE|MULTI_PROFILE|.*DEVICE_.*)=' .config || true
             failed=1
           fi
           if grep -E '^CONFIG_PACKAGE_(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router)=[ym]$' .config; then
@@ -102,6 +123,7 @@ jobs:
             exit 1
           fi
       - name: Download packages
+        shell: bash
         working-directory: wrt
         run: make download -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/download.log"
       - name: Compile firmware
