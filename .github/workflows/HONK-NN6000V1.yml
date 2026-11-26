@@ -122,7 +122,11 @@ jobs:
             echo '::error file=wrt/.config::mosdns or daed was unexpectedly selected.'
             failed=1
           fi
-          if [[ "$DEVICE" == zn_m2 ]] && grep -E '^CONFIG_PACKAGE_(docker|dockerd|containerd|runc|tini|cgroupfs-mount|luci-app-dockerman|luci-i18n-dockerman-[^ =]+)=[ym]
+          if [[ "$DEVICE" == zn_m2 ]] && grep -E '^CONFIG_PACKAGE_(docker|dockerd|containerd|runc|tini|cgroupfs-mount|luci-app-dockerman|luci-i18n-dockerman-[^ =]+)=[ym]$' .config; then
+            echo '::error file=wrt/.config::Docker packages must be disabled for ZN M2.'
+            failed=1
+          fi
+          if [ -e package/base-files/files/usr/bin/daed ]; then
             echo '::error::Found an injected daed binary in base-files.'
             failed=1
           fi
@@ -151,69 +155,6 @@ jobs:
             for pkg in honk luci-app-honk dnsmasq-full; do grep -E "^$pkg - " "$manifest"; done
             if grep -E '^(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router) - ' "$manifest"; then exit 1; fi
             if [[ "$DEVICE" == zn_m2 ]] && grep -E '^(docker|dockerd|containerd|runc|tini|cgroupfs-mount|luci-app-dockerman|luci-i18n-dockerman-[^ =]+) - ' "$manifest"; then exit 1; fi
-          done
-          mkdir -p test-firmware
-          cp "${images[@]}" "${manifests[@]}" diagnostics/openwrt-config.txt diagnostics/build-info.txt test-firmware/
-          (cd test-firmware && sha256sum -- * > SHA256SUMS)
-      - name: Collect kernel and image diagnostics
-        if: always()
-        run: |
-          mkdir -p diagnostics/kernel-configs
-          if [ -d wrt/build_dir ]; then
-            while IFS= read -r file; do
-              dest="diagnostics/kernel-configs/${file#wrt/}.txt"
-              mkdir -p "$(dirname "$dest")"
-              cp "$file" "$dest"
-            done < <(find wrt/build_dir -type f -path '*/linux-*/linux-*/.config')
-            find wrt/build_dir -type f -name '*.itb' -printf '%s\t%p\n' > diagnostics/fit-sizes.tsv
-          fi
-          if [ -d wrt/bin/targets ]; then find wrt/bin/targets -type f -printf '%s\t%p\n' > diagnostics/image-sizes.tsv; fi
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: honk-${{ matrix.device }}-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: diagnostics/
-          retention-days: 14
-      - name: Upload test firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: honk-${{ matrix.device }}-firmware-${{ github.run_id }}-${{ github.run_attempt }}
-          path: test-firmware/
-          if-no-files-found: error
-          retention-days: 14
- .config; then
-            echo '::error file=wrt/.config::Docker packages must be disabled for ZN M2.'
-            failed=1
-          fi
-          if [ -e package/base-files/files/usr/bin/daed ]; then
-            echo '::error::Found an injected daed binary in base-files.'
-            failed=1
-          fi
-          if (( failed )); then
-            exit 1
-          fi
-      - name: Download packages
-        shell: bash
-        working-directory: wrt
-        run: make download -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/download.log"
-      - name: Compile firmware
-        shell: bash
-        working-directory: wrt
-        run: |
-          if ! make -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-parallel.log"; then
-            make -j1 V=s 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-retry.log"
-          fi
-      - name: Verify and stage test images
-        run: |
-          shopt -s nullglob
-          target=wrt/bin/targets/qualcommax/ipq60xx
-          manifests=("$target"/*link_nn6000-v1*.manifest)
-          images=("$target"/*link_nn6000-v1*sysupgrade*)
-          ((${#manifests[@]} > 0 && ${#images[@]} > 0))
-          for manifest in "${manifests[@]}"; do
-            for pkg in honk luci-app-honk dnsmasq-full; do grep -E "^$pkg - " "$manifest"; done
-            if grep -E '^(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router) - ' "$manifest"; then exit 1; fi
           done
           mkdir -p test-firmware
           cp "${images[@]}" "${manifests[@]}" diagnostics/openwrt-config.txt diagnostics/build-info.txt test-firmware/
