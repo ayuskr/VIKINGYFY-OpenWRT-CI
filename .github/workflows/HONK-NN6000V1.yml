@@ -1,4 +1,4 @@
-name: Honk NN6000 v1 test firmware
+name: Honk IPQ60xx firmware
 
 on:
   push:
@@ -15,9 +15,19 @@ concurrency:
 jobs:
   build:
     if: github.ref == 'refs/heads/honk-nn6000v1'
+    name: Build ${{ matrix.device }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: link_nn6000-v1
+            config: IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI
+          - device: zn_m2
+            config: IPQ60XX-ZNM2-NSS-NOWIFI
     env:
-      WRT_CONFIG: IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI
+      DEVICE: ${{ matrix.device }}
+      WRT_CONFIG: ${{ matrix.config }}
       WRT_TARGET: qualcommax
       WRT_THEME: vantage
       WRT_NAME: OWRT
@@ -71,11 +81,8 @@ jobs:
           cat "$GITHUB_WORKSPACE/Config/HONK-PACKAGES.txt" >> .config
           # TARGET_DEVICE_* is the multi-profile selection. For a single device,
           # select the actual target choice; Kconfig derives TARGET_PROFILE from it.
-          sed -i -E '/^(# )?CONFIG_TARGET_(MULTI_PROFILE|ALL_PROFILES|PER_DEVICE_ROOTFS|PROFILE|DEVICE_qualcommax_ipq60xx_DEVICE_link_nn6000-v1|qualcommax_ipq60xx_DEVICE_link_nn6000-v1)(=| is not set)/d' .config
-          cat >> .config <<'EOF'
-          # CONFIG_TARGET_MULTI_PROFILE is not set
-          CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_link_nn6000-v1=y
-          EOF
+          sed -i -E '/^(# )?CONFIG_TARGET_(MULTI_PROFILE|ALL_PROFILES|PER_DEVICE_ROOTFS|PROFILE|(DEVICE_)?qualcommax_ipq60xx_DEVICE_[^= ]+)(=| is not set)/d' .config
+          printf '# CONFIG_TARGET_MULTI_PROFILE is not set\nCONFIG_TARGET_qualcommax_ipq60xx_DEVICE_%s=y\n' "$DEVICE" >> .config
       - name: Validate Honk firmware configuration
         shell: bash
         working-directory: wrt
@@ -91,7 +98,7 @@ jobs:
           fi
 
           required=(
-            CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_link_nn6000-v1
+            "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_$DEVICE"
             CONFIG_PACKAGE_honk
             CONFIG_PACKAGE_luci-app-honk
             CONFIG_PACKAGE_dnsmasq-full
@@ -106,13 +113,77 @@ jobs:
               failed=1
             fi
           done
-          if ! grep -Fxq 'CONFIG_TARGET_PROFILE="DEVICE_link_nn6000-v1"' .config || grep -Fxq 'CONFIG_TARGET_MULTI_PROFILE=y' .config; then
-            echo '::error file=wrt/.config::Expected the single-device NN6000 v1 profile.'
+          if ! grep -Fxq "CONFIG_TARGET_PROFILE=\"DEVICE_$DEVICE\"" .config || grep -Fxq 'CONFIG_TARGET_MULTI_PROFILE=y' .config; then
+            echo "::error file=wrt/.config::Expected the single-device $DEVICE profile."
             grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE|MULTI_PROFILE|.*DEVICE_.*)=' .config || true
             failed=1
           fi
           if grep -E '^CONFIG_PACKAGE_(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router)=[ym]$' .config; then
             echo '::error file=wrt/.config::mosdns or daed was unexpectedly selected.'
+            failed=1
+          fi
+          if [[ "$DEVICE" == zn_m2 ]] && grep -E '^CONFIG_PACKAGE_(docker|dockerd|containerd|runc|tini|cgroupfs-mount|luci-app-dockerman|luci-i18n-dockerman-[^ =]+)=[ym]
+            echo '::error::Found an injected daed binary in base-files.'
+            failed=1
+          fi
+          if (( failed )); then
+            exit 1
+          fi
+      - name: Download packages
+        shell: bash
+        working-directory: wrt
+        run: make download -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/download.log"
+      - name: Compile firmware
+        shell: bash
+        working-directory: wrt
+        run: |
+          if ! make -j"$(nproc)" 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-parallel.log"; then
+            make -j1 V=s 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/build-retry.log"
+          fi
+      - name: Verify and stage test images
+        run: |
+          shopt -s nullglob
+          target=wrt/bin/targets/qualcommax/ipq60xx
+          manifests=("$target"/*"$DEVICE"*.manifest)
+          images=("$target"/*"$DEVICE"*sysupgrade*)
+          ((${#manifests[@]} > 0 && ${#images[@]} > 0))
+          for manifest in "${manifests[@]}"; do
+            for pkg in honk luci-app-honk dnsmasq-full; do grep -E "^$pkg - " "$manifest"; done
+            if grep -E '^(mosdns|luci-app-mosdns|daed|daed-router|luci-app-daed-router) - ' "$manifest"; then exit 1; fi
+            if [[ "$DEVICE" == zn_m2 ]] && grep -E '^(docker|dockerd|containerd|runc|tini|cgroupfs-mount|luci-app-dockerman|luci-i18n-dockerman-[^ =]+) - ' "$manifest"; then exit 1; fi
+          done
+          mkdir -p test-firmware
+          cp "${images[@]}" "${manifests[@]}" diagnostics/openwrt-config.txt diagnostics/build-info.txt test-firmware/
+          (cd test-firmware && sha256sum -- * > SHA256SUMS)
+      - name: Collect kernel and image diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics/kernel-configs
+          if [ -d wrt/build_dir ]; then
+            while IFS= read -r file; do
+              dest="diagnostics/kernel-configs/${file#wrt/}.txt"
+              mkdir -p "$(dirname "$dest")"
+              cp "$file" "$dest"
+            done < <(find wrt/build_dir -type f -path '*/linux-*/linux-*/.config')
+            find wrt/build_dir -type f -name '*.itb' -printf '%s\t%p\n' > diagnostics/fit-sizes.tsv
+          fi
+          if [ -d wrt/bin/targets ]; then find wrt/bin/targets -type f -printf '%s\t%p\n' > diagnostics/image-sizes.tsv; fi
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: honk-${{ matrix.device }}-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/
+          retention-days: 14
+      - name: Upload test firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: honk-${{ matrix.device }}-firmware-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-firmware/
+          if-no-files-found: error
+          retention-days: 14
+ .config; then
+            echo '::error file=wrt/.config::Docker packages must be disabled for ZN M2.'
             failed=1
           fi
           if [ -e package/base-files/files/usr/bin/daed ]; then
@@ -164,13 +235,45 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: honk-nn6000v1-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: honk-${{ matrix.device }}-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: diagnostics/
           retention-days: 14
       - name: Upload test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: honk-nn6000v1-firmware-${{ github.run_id }}-${{ github.run_attempt }}
+          name: honk-${{ matrix.device }}-firmware-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-firmware/
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish firmware to Releases
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: honk-*-firmware-${{ github.run_id }}-${{ github.run_attempt }}
+          path: firmware
+      - name: Publish verified images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          for device in link_nn6000-v1 zn_m2; do
+            source="firmware/honk-${device}-firmware-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            (cd "$source" && sha256sum -c SHA256SUMS)
+            cp "$source"/*sysupgrade* "$source"/*.manifest release/
+            cp "$source/openwrt-config.txt" "release/$device.config.txt"
+            cp "$source/build-info.txt" "release/$device.build-info.txt"
+          done
+          (cd release && sha256sum -- * > SHA256SUMS)
+          tag="honk-firmware-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Honk firmware | NN6000 v1 & ZN M2 | $GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT" \
+            --notes "Use the sysupgrade image matching your exact device. ZN M2 omits Docker and Dockerman. Verify downloads using SHA256SUMS." \
+            release/*

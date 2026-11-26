@@ -94,7 +94,7 @@ if [ -f "$RUST_FILE" ]; then
 	cd $PKG_PATH && echo "rust has been fixed!"
 fi
 
-# NN6000 v1: bundle Honk and Doona, not NaiLink.
-if [ "$WRT_CONFIG" = "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" ]; then
+# Bundle Honk and Doona for the Honk device profiles.
+if [[ "$WRT_CONFIG" == "IPQ60XX-LINK-NN6000V1-NSS-USB-NOWIFI" || "$WRT_CONFIG" == "IPQ60XX-ZNM2-NSS-NOWIFI" ]]; then
 	bash "$GITHUB_WORKSPACE/Scripts/Honk.sh"
 fi
