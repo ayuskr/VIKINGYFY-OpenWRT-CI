@@ -97,8 +97,7 @@ CONFIG_PACKAGE_kmod-nls-iso8859-1=y
 CONFIG_PACKAGE_kmod-nls-utf8=y
 
 # ===== Required plugins =====
-# NaiLink 取代 Passwall：daed 运行包与 LuCI 由 Scripts/NaiLink.sh 直接注入固件，
-# dae / sing-box / mihomo 三个内核一并内建，运行时无需再下载。
+# Honk replaces the former NaiLink integration on this build.
 CONFIG_PACKAGE_luci-app-passwall=n
 CONFIG_PACKAGE_passwall=n
 CONFIG_PACKAGE_kmod-sched-core=y
@@ -109,34 +108,22 @@ CONFIG_PACKAGE_uclient-fetch=y
 CONFIG_PACKAGE_v2ray-geoip=y
 CONFIG_PACKAGE_v2ray-geosite=y
 
-# ===== Kernel: dae 需要 BTF =====
-# dae 依赖 BPF CO-RE，必须有内核 BTF（/sys/kernel/btf/vmlinux）。
-# BTF 与 DEBUG_INFO_REDUCED 互斥，REDUCED 默认 y，必须显式关掉。
-# 已实测验证：NaiLink 检查项 "btf" 通过。
+# ===== Kernel: Honk requires BTF for BPF CO-RE =====
 CONFIG_KERNEL_DEBUG_INFO_REDUCED=n
 CONFIG_KERNEL_DEBUG_INFO_BTF=y
 
-# ===== Kernel: NaiLink 兼容性门禁强制要求 =====
-# NaiLink 0.6.84 的 check --check 会硬性校验这三项，缺任一项即 compatible=false，
-# 服务直接拒绝启动（现象：LuCI 显示"启动失败"，且日志为空，因为进程从未被拉起）。
-#   Required kernel options are missing: CONFIG_KPROBES CONFIG_KPROBE_EVENTS CONFIG_BPF_EVENTS
-# PERF_EVENTS 不在检查清单里，但 KPROBE_EVENTS / BPF_EVENTS 在 Kconfig 中依赖它，
-# 不一起打开这两项会被静默丢弃，等于白开。
-CONFIG_KERNEL_PERF_EVENTS=y
-CONFIG_KERNEL_KPROBES=y
-CONFIG_KERNEL_KPROBE_EVENTS=y
-CONFIG_KERNEL_BPF_EVENTS=y
+# Honk does not need the KPROBES compatibility gates used by the old NaiLink build.
+# Removing these unused tracing options helps the NN6000 v1 6 MiB kernel FIT limit.
+CONFIG_KERNEL_PERF_EVENTS=n
+CONFIG_KERNEL_KPROBES=n
+CONFIG_KERNEL_KPROBE_EVENTS=n
+CONFIG_KERNEL_BPF_EVENTS=n
 CONFIG_KERNEL_FTRACE=n
 
-# ===== Kernel: 体积压缩（KERNEL_SIZE 只有 6144k）=====
-# 实测 O2 时代 FIT 6901800 字节，超出 6291456 上限约 596 KiB。
-# 内核默认 O2，改成 Os 是单项最大收益（用户态的 -Os 不影响内核）。
+# ===== Kernel: 6144 KiB kernel FIT partition =====
 CONFIG_KERNEL_CC_OPTIMIZE_FOR_SIZE=y
 # CONFIG_KERNEL_CC_OPTIMIZE_FOR_PERFORMANCE is not set
-# 符号表：占空间明显，代价是 oops 只能看到地址。
-# 已实测：NaiLink 检查不依赖 kallsyms，可以安全关闭。
 CONFIG_KERNEL_KALLSYMS=n
-# 组播路由：没有 igmpproxy / udpxy，不做 IPTV 组播转发。
 CONFIG_KERNEL_IP_MROUTE=n
 CONFIG_KERNEL_IP_MROUTE_MULTIPLE_TABLES=n
 CONFIG_KERNEL_IP_PIMSM_V1=n
@@ -144,30 +131,26 @@ CONFIG_KERNEL_IP_PIMSM_V2=n
 CONFIG_KERNEL_IPV6_MROUTE=n
 CONFIG_KERNEL_IPV6_MROUTE_MULTIPLE_TABLES=n
 CONFIG_KERNEL_IPV6_PIMSM_V2=n
-# MPTCP：没装 kmod-mptcp。
 CONFIG_KERNEL_MPTCP=n
 CONFIG_KERNEL_MPTCP_IPV6=n
-# 调试与转储：保留 debugfs 供 LuCI 读取 NSS 和 ECM 统计。
+
+# Required by LuCI NSS load and ECM statistics at /sys/kernel/debug.
 CONFIG_KERNEL_DEBUG_FS=y
 CONFIG_KERNEL_MAGIC_SYSRQ=n
 CONFIG_KERNEL_COREDUMP=n
 CONFIG_KERNEL_ELF_CORE=n
 CONFIG_KERNEL_FANOTIFY=n
-# 边角特性：无应用依赖。
 CONFIG_KERNEL_IO_URING=n
 CONFIG_KERNEL_POSIX_MQUEUE=n
-# 文件 ACL：不涉及 ACL 权限继承。
 CONFIG_USE_FS_ACL_ATTR=n
-# cgroup 冷门控制器：Docker 只用 cpu / memory / pids / device。
-# 注意：CGROUP_BPF 必须保留，dae 的 cgroup eBPF 挂在它上面。
+
+# cgroup options not used by Honk.
 CONFIG_KERNEL_BLK_CGROUP=n
 CONFIG_KERNEL_BLK_DEV_THROTTLING=n
 CONFIG_KERNEL_RT_GROUP_SCHED=n
 CONFIG_KERNEL_CFS_BANDWIDTH=n
 CONFIG_KERNEL_CGROUP_RDMA=n
 CONFIG_KERNEL_NET_CLS_CGROUP=n
-# NETKIT：关闭后 daed 启动会打印两条警告并回退 veth（功能正常）。
-# 保持关闭以省空间；若日后不再卡 6144k 可改 y。
 CONFIG_KERNEL_NETKIT=n
 CONFIG_KERNEL_XDP_SOCKETS=n
 
